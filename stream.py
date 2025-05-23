@@ -1,9 +1,12 @@
+import os
+os.environ["OLLAMA_HOST"] = "http://localhost:11434"  # Must be set before importing ollama
+
 import streamlit as st
 import ollama
 from PIL import Image
-import io
+import base64
 
-# Page configuration
+# Page config
 st.set_page_config(
     page_title="Llama OCR",
     page_icon="🦙",
@@ -11,54 +14,59 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Title and description in main area
 st.title("🦙 Llama OCR")
+st.markdown('<p style="margin-top: -20px;">Extract structured text from images using Llama 3.2 Vision!</p>', unsafe_allow_html=True)
+st.markdown("---")
 
-# Add clear button to top right
-col1, col2 = st.columns([6,1])
+# Sidebar upload
+with st.sidebar:
+    st.header("Upload Image")
+    uploaded_file = st.file_uploader("Choose an image...", type=['png', 'jpg', 'jpeg'])
+
+# Clear button top right
+col1, col2 = st.columns([6, 1])
 with col2:
     if st.button("Clear 🗑️"):
         if 'ocr_result' in st.session_state:
             del st.session_state['ocr_result']
-        st.rerun()
+        st.experimental_rerun()
 
-st.markdown('<p style="margin-top: -20px;">Extract structured text from images using Llama 3.2 Vision!</p>', unsafe_allow_html=True)
-st.markdown("---")
+if uploaded_file is not None:
+    # Show image preview
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Image")
 
-# Move upload controls to sidebar
-with st.sidebar:
-    st.header("Upload Image")
-    uploaded_file = st.file_uploader("Choose an image...", type=['png', 'jpg', 'jpeg'])
-    
-    if uploaded_file is not None:
-        # Display the uploaded image
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image")
-        
-        if st.button("Extract Text 🔍", type="primary"):
-            with st.spinner("Processing image..."):
-                try:
-                    response = ollama.chat(
-                        model='llama3.2-vision',
-                        messages=[{
-                            'role': 'user',
-                            'content': """Analyze the text in the provided image. Extract all readable content
-                                        and present it in a structured Markdown format that is clear, concise, 
-                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                                        code blocks) as necessary to represent the content effectively.""",
-                            'images': [uploaded_file.getvalue()]
-                        }]
-                    )
-                    st.session_state['ocr_result'] = response.message.content
-                except Exception as e:
-                    st.error(f"Error processing image: {str(e)}")
+    if st.button("Extract Text 🔍"):
+        with st.spinner("Processing image..."):
+            try:
+                image_bytes = uploaded_file.getvalue()
+                img_b64 = base64.b64encode(image_bytes).decode()
 
-# Main content area for results
+                prompt = (
+                    "<image>\n"
+                    "Extract all text visible in the image exactly as it appears. "
+                    "Provide output in clear, structured Markdown format."
+                )
+
+                response = ollama.chat(
+                    model="llama3.2-vision:11b",
+                    messages=[{
+                        "role": "user",
+                        "content": prompt,
+                        "images": [img_b64]
+                    }],
+                )
+
+                st.session_state['ocr_result'] = response.message.content
+
+            except Exception as e:
+                st.error(f"Error processing image: {str(e)}")
+
+# Display OCR result
 if 'ocr_result' in st.session_state:
     st.markdown(st.session_state['ocr_result'])
 else:
     st.info("Upload an image and click 'Extract Text' to see the results here.")
 
-# Footer
 st.markdown("---")
-st.markdown("Made with ❤️ using Llama Vision Model2 | [Report an Issue](https://github.com/patchy631/ai-engineering-hub/issues)")
+st.markdown("Made with ❤️ using Llama Vision Model | [Report an Issue](https://github.com/patchy631/ai-engineering-hub/issues)")
